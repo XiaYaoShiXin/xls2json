@@ -15,11 +15,12 @@ function XLS_json (config, callback) {
   
 }
 
+
 function CV(config, callback) { 
-  var wb = this.load_xls(config.input)
+  var wb = this.load_xls(config.input);
   var ws = this.ws(wb, config.sheet);
-  var csv = this.csv(ws)
-  this.cvjson(csv, config.output, callback, config.rowsToSkip || 0)
+  var csv = this.csv(ws);
+  this.cvjson(csv, config.output, callback, config.rowsToSkip || 0, config.columns || null);
 }
 
 CV.prototype.load_xls = function(input) {
@@ -32,12 +33,13 @@ CV.prototype.ws = function(wb, target_sheet) {
 }
 
 CV.prototype.csv = function(ws) {
-  return csv_file = xlsx.utils.make_csv(ws)
+  return csv_file = xlsx.utils.make_csv(ws);
 }
 
-CV.prototype.cvjson = function(csv, output, callback, rowsToSkip) {
-  var record = []
-  var header = []
+
+CV.prototype.cvjson = function(csv, output, callback, rowsToSkip, columns) {
+  var record = [];
+  var header = [];
 
   cvcsv()
     .from.string(csv)
@@ -48,12 +50,18 @@ CV.prototype.cvjson = function(csv, output, callback, rowsToSkip) {
     .on('record', function(row, index){
       
       if(index === rowsToSkip) {
-        header = row;
+        if(columns instanceof Array){
+          header = row.filter(function(column){
+            return columns.includes(column);
+          });
+        } else {
+          header = row;
+        }
       }else if (index > rowsToSkip) {
         var obj = {};
         header.forEach(function(column, index) {
           obj[column.trim()] = row[index].trim();
-        })
+        });
         record.push(obj);
       }
     })
@@ -63,13 +71,10 @@ CV.prototype.cvjson = function(csv, output, callback, rowsToSkip) {
       if(output !== null) {
       	var stream = fs.createWriteStream(output, { flags : 'w' });
       	stream.write(JSON.stringify(record));
-      	callback(null, record);
-      } else {
-      	callback(null, record);
       }
-      
+      if(typeof callback=="function") callback(null, record);
     })
     .on('error', function(error){
-      callback(error, null);
+      if(typeof callback=="function") callback(error, null);
     });
 }
