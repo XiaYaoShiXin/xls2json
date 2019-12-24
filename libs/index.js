@@ -20,7 +20,7 @@ function CV(config, callback) {
   var wb = this.load_xls(config.input);
   var ws = this.ws(wb, config.sheet);
   var csv = this.csv(ws);
-  this.cvjson(csv, config.output, callback, config.rowsToSkip || 0, config.columns || null);
+  this.cvjson(csv, config.output, callback, config.rowsToSkip || 0, config.columns || null, config.filter || null, config.sort || null, config.columnMapper || null);
 }
 
 CV.prototype.load_xls = function(input) {
@@ -37,9 +37,9 @@ CV.prototype.csv = function(ws) {
 }
 
 
-CV.prototype.cvjson = function(csv, output, callback, rowsToSkip, columns) {
-  var record = [];
-  var header = [];
+CV.prototype.cvjson = function(csv, output, callback, rowsToSkip, columns, filter , sort , columnMapper) {
+  var records = [];
+  var headers = [];
 
   cvcsv()
     .from.string(csv)
@@ -48,31 +48,56 @@ CV.prototype.cvjson = function(csv, output, callback, rowsToSkip, columns) {
       return row;
     })
     .on('record', function(row, index){
-      
       if(index === rowsToSkip) {
-        if(columns instanceof Array){
-          header = row.filter(function(column){
-            return columns.includes(column);
+        headers = row.map(function(name,index){//get headers
+          return {name,index};
+        });
+        if(columns instanceof Array){//select headers
+          headers = headers.filter(function(header){
+            return columns.includes(header["name"]);
           });
-        } else {
-          header = row;
         }
       }else if (index > rowsToSkip) {
         var obj = {};
-        header.forEach(function(column, index) {
-          obj[column.trim()] = row[index].trim();
+        headers.forEach(function(header) {
+          var key = header["name"].trim();
+          var val = row[header["index"]].trim();
+          obj[key] = val;
         });
-        record.push(obj);
+        records.push(obj);
       }
     })
     .on('end', function(count){
+      //extra works
+      if(typeof filter=="function") records.filter(filter);
+      if(typeof sort=="function") records.sort(sort);
+
+      if(typeof columnMapper=="object" && columnMapper!==null){
+        Object.keys(columnMapper).forEach(function(key){
+          if(typeof columnMapper[key]!="function") delete columnMapper[key];//handle error arguments
+        });
+        records = records.map(function(record){
+          for(var key in columnMapper){
+            const mapper = columnMapper[key];
+            var arg;
+            if(record.hasOwnProperty(key)){//current column -> new value
+              arg = record[key];
+            } else {//current record + extra column
+              arg = record;
+            }
+            record[key] = mapper(arg);
+          }
+          return record;
+        });
+
+      }
       // when writing to a file, use the 'close' event
       // the 'end' event may fire before the file has been written
       if(output !== null) {
       	var stream = fs.createWriteStream(output, { flags : 'w' });
-      	stream.write(JSON.stringify(record));
+      	stream.write(JSON.stringify(records));
       }
-      if(typeof callback=="function") callback(null, record);
+      if(typeof callback=="function") callback(null, records);
     })
     .on('error', function(error){
       if(typeof callback=="function") callback(error, null);
