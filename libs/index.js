@@ -69,9 +69,6 @@ CV.prototype.cvjson = function(csv, output, callback, rowsToSkip, columns, filte
     })
     .on('end', function(count){
       //extra works
-      if(typeof filter=="function") records.filter(filter);
-      if(typeof sort=="function") records.sort(sort);
-
       if(typeof columnMapper=="object" && columnMapper!==null){
         Object.keys(columnMapper).forEach(function(key){
           if(typeof columnMapper[key]!="function") delete columnMapper[key];//handle error arguments
@@ -89,8 +86,11 @@ CV.prototype.cvjson = function(csv, output, callback, rowsToSkip, columns, filte
           }
           return record;
         });
-
       }
+      //filter & sort after column map may cost more compute.
+      //however,sometimes we need some simple mapper like Number(str) before sort
+      if(typeof filter=="function") records = records.filter(filter);
+      if(typeof sort=="function") records = records.sort(sort);
       // when writing to a file, use the 'close' event
       // the 'end' event may fire before the file has been written
       if(output !== null) {
